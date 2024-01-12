@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Réponse de l'API</title>
+</head>
+<body>
+    <h1>Contenu de l'API:</h1>
+    <p onclick ="getAPIContent('')">GET ALL</p>
+    <button onclick="getAPIContent('artists')">Artistes</button>
+    <button onclick="getAPIContent('dates')">Dates</button>
+    <button onclick="getAPIContent('locations')">Locations</button>
+    <div id="apiContent"></div>
+
+    <script>
+        function getAPIContent(key) {
+            fetch('/' + key)
+                .then(response => response.text())
+                .then(data => {
+                    document.getElementById('apiContent').innerHTML = data;
+                })
+                .catch(error => {
+                    console.error('Erreur lors de la récupération des données:', error);
+                });
+        }
+    </script>
+</body>
+</html>
