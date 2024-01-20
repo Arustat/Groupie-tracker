@@ -20,44 +20,50 @@ type ArtistsInfo struct {
 }
 
 type LocationsInfo struct {
+	Index []struct  {
     ID        int      `json:"id"`
     Locations []string `json:"locations"`
-    Dates     []string `json:"dates"`
+    Dates     string `json:"dates"`
+	}`json: "index"`
 }
 
 type DatesInfo struct {
-    ID    int      `json:"id"`
-    Dates []string `json:"dates"`
+	Index []struct  {
+		Id 		int    `json: "id"`
+		Dates []string `json: "dates"`
+	}`json: "index"`
 }
 
 type RelationsInfo struct {
-    ID             int         `json:"id"`
-    DatesLocations []string    `json:"datesLocations"`
+	Index []struct {
+		ID             int         `json:"id"`
+    	DatesLocations map[string][]string    `json:"datesLocations"`
+	}`json: index`
 }
 
 type GroupieTracker struct {
     ArtistsInfo string     `json:"artists"`
-    Locations   string   `json:"locations"`
-    Dates       string      `json:"dates"`
-    Relations   string   `json:"relation"`
+    LocationsInfo   string   `json:"locations"`
+    DatesInfo   string `json:"dates"`
+    RelationsInfo   string   `json:"relation"`
 }
 
 
 
 func recupJSON() (*GroupieTracker, error) {
 	resp, err := http.Get("https://groupietrackers.herokuapp.com/api")
-	if err != nil {
-		fmt.Println("Erreur lors de la requête GET :", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
+    if err != nil {
+        fmt.Println("Erreur lors de la requête GET :", err)
+        return nil, err
+    }
+    defer resp.Body.Close()
 
-	var apiInfo GroupieTracker
-	err = json.NewDecoder(resp.Body).Decode(&apiInfo)
-	if err != nil {
-		return nil, err
-	}
-	return &apiInfo, nil
+    var apiInfo GroupieTracker
+    err = json.NewDecoder(resp.Body).Decode(&apiInfo)
+    if err != nil {
+        return nil, err
+    }
+    return &apiInfo, nil
 }
 
 func main() {
@@ -71,7 +77,7 @@ func start() {
 		return
 	}
 	var saisie string
-	fmt.Print("Que voulez-vous consulter ? (Artists) (Dates) (Locations) (Relations): ")
+	fmt.Print("Que voulez-vous consulter ? (Artists) (Dates) (Locations) (Relations) (All): ")
 	_, err = fmt.Scan(&saisie)
 	if err != nil {
 		fmt.Println("Erreur", err)
@@ -83,30 +89,72 @@ func start() {
 		fmt.Println("URL des artistes:", apiInfo.ArtistsInfo)
 		artist(apiInfo.ArtistsInfo)
 	case "Dates":
-		fmt.Println("URL des dates:", apiInfo.Dates)
-		datesList, err := recupDates(apiInfo.Dates)
-		if err != nil {
-			fmt.Println("Erreur",err)
-			return
-		}
-		var dateSaisie string
-		fmt.Print("Quelle date voulez-vous consulter ? (Saisissez la Date) :")
-		_, err = fmt.Scan(&dateSaisie)
-        if err != nil {
-            fmt.Println("Erreur", err)
-            return
-        }
-
-        searchByDate(datesList, dateSaisie)
+		fmt.Println("URL des artistes:", apiInfo.DatesInfo)
+		artistefindwithdate(apiInfo.DatesInfo, apiInfo.ArtistsInfo)
 	case "Locations":
-		fmt.Println("URL des locations:", apiInfo.Locations)
+		fmt.Println("URL des locations:", apiInfo.LocationsInfo)
 	case "Relations":
-		fmt.Println("URL des relations:", apiInfo.Relations)
+		fmt.Println("URL des relations:", apiInfo.RelationsInfo)
+	case "All":
+		all()
 	default:
 		fmt.Println("Entrée non reconnue")
 		start()
 	}
 }
+
+func all(){
+	api, err := recupJSON()
+	if err != nil {
+		fmt.Println("Problème de récupération des infos API", err)
+		return
+	}
+	artistList, err := recupArtistes(api.ArtistsInfo)
+	if err != nil {
+		fmt.Println("Erreur", err)
+		return
+	}
+	locationsList, err := recupLocation(api.LocationsInfo)
+	if err != nil {
+		fmt.Println("Erreur", err)
+		return
+	}
+	concertDatesList, err := recupDates(api.DatesInfo)
+	if err != nil {
+		fmt.Println("Erreur", err)
+		return
+	}
+
+	relationList, err := recupRelation(api.RelationsInfo)
+	if err != nil {
+		fmt.Println("Erreur", err)
+		return
+	}
+
+	for _, artiste := range artistList {
+		fmt.Printf("Id: %d",artiste.ID)
+		fmt.Println("")
+		fmt.Printf("Image: %s",artiste.Image)
+		fmt.Println("")
+		fmt.Printf("Name: %s",artiste.Name)
+		fmt.Println("")
+		fmt.Printf("Members: %s",artiste.Members)
+		fmt.Println("")
+		fmt.Printf("CreationDate: %d",artiste.CreationDate)
+		fmt.Println("")
+		fmt.Printf("FirstAlbum: %s",artiste.FirstAlbum)
+		fmt.Println("")
+		fmt.Printf("Locations: %s",locationsList.Index[artiste.ID].Locations)
+		fmt.Println("")
+		fmt.Printf("ConcertDates: %s",concertDatesList.Index[artiste.ID].Dates)
+		fmt.Println("")
+		fmt.Printf("Relations: %s",relationList.Index[artiste.ID].DatesLocations)
+		fmt.Println("") 
+		fmt.Println("")
+	}
+}
+
+
 
 func recupArtistes(url string) ([]ArtistsInfo, error) {
 	resp, err := http.Get(url)
@@ -123,6 +171,52 @@ func recupArtistes(url string) ([]ArtistsInfo, error) {
 	return artistsInfo, nil
 }
 
+func recupDates(url string) (*DatesInfo, error){
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var datesInfo DatesInfo
+	err = json.NewDecoder(resp.Body).Decode(&datesInfo)
+	if err != nil {
+		return nil, err
+	}
+	return &datesInfo, nil
+}
+
+func recupRelation(url string) (*RelationsInfo, error){
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var relationsInfo RelationsInfo
+	err = json.NewDecoder(resp.Body).Decode(&relationsInfo)
+	if err != nil {
+		return nil, err
+	}
+	return &relationsInfo, nil
+}
+
+func recupLocation(url string) (*LocationsInfo, error){
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var locationsInfo LocationsInfo
+	err = json.NewDecoder(resp.Body).Decode(&locationsInfo)
+	if err != nil {
+		return nil, err
+	}
+	return &locationsInfo, nil
+}
+
+
 func artist(api string) {
 	artistList, err := recupArtistes(api)
 	if err != nil {
@@ -131,7 +225,7 @@ func artist(api string) {
 	}
 
 	var saisie string
-	fmt.Print("Quel artiste voulez-vous consulter ? (Saisissez le nom de l'artiste) : ")
+	fmt.Print("Quel artiste voulez-vous consulter ? (Saisissez le nom de l'artiste) (all): ")
 	_, err = fmt.Scan(&saisie)
 	if err != nil {
 		fmt.Println("Erreur", err)
@@ -184,44 +278,47 @@ func artist(api string) {
 	}
 }
 
-func recupDates(url string)([]DatesInfo, error){
-	resp, err := http.Get(url)
+func artistefindwithdate(api string, apiartist string){
+	var indexartist []int
+	datesInfo, err := recupDates(api)
 	if err != nil {
-		return nil,err
-	}
-	defer resp.Body.Close()
-
-	
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("La requête a retourné un statut non OK: %d", resp.StatusCode)
+		fmt.Println("Erreur", err)
+		return
 	}
 
-	var datesInfo []DatesInfo
-	err = json.NewDecoder(resp.Body).Decode(&datesInfo)
-	if err != nil{
-		return nil,err
-	}
-	return datesInfo, nil
-}
+	var saisie string
+	fmt.Print("Veuillez entrer une date (format : JJ-MM-AA ): ")
+	fmt.Scan(&saisie)
 
-func searchByDate(datesList []DatesInfo, date string){
-	found := false
-
-	for _, d := range datesList{
-		for _,dateItem := range d.Dates{
-			found = true
-			getArtistByDate(d.ID,dateItem)
-			break
-		}
-		if found {
-			break
+	for i, index := range datesInfo.Index {
+		for _, date := range index.Dates {
+			if string(date[0]) == "*"{
+				date = strings.Replace(date, string("*"),"",-1)
+				if date == saisie{
+					indexartist = append(indexartist, i)
+				}
+			}else{
+				if date == saisie{
+					indexartist = append(indexartist, i)
+				}
+			}
 		}
 	}
-	if !found{
-		fmt.Printf("Aucun artiste performe pour la date %s \n",date)
-	}
+	artistId(apiartist, indexartist)
 }
 
-func getArtistByDate(dateID int, date string){
-	fmt.Printf("Artistes qui performent à la date %s (ID: $d):\n",date,dateID)
+func artistId(apiartist string, index []int){
+	artistList, err := recupArtistes(apiartist)
+	if err != nil {
+		fmt.Println("Erreur", err)
+		return
+	}
+
+	for _,i := range index{
+		artist := artistList[i]
+		fmt.Println("Voici les informations sur l'artiste :", artist.Name)
+		fmt.Println("ID :", artist.ID)
+		fmt.Println("Image :", artist.Image)
+		fmt.Println("Name :", artist.Name)
+	}
 }
