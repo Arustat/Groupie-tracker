@@ -17,6 +17,20 @@
                 <input type="submit" value="Search">
             </form>
         </div>
+        <div class="filter_date">
+            <form action="/filtre" method="GET">
+                <label for="date-range">Sélectionnez une date de concert :</label>
+                <input type="date" id="filtre" name="filtre" value="04-02-2024" min="01-01-1950" max="31-12-2025">            
+                <input type="submit" value="Filtrer">
+            </form>  
+        </div>  
+        <form action="/localisation" method="GET">
+            <div class="filter-geo">
+                <label for="filter-range">Chercher un lieu : </label>
+                <input type="search" name="geo"  id="geo-search" placeholder="Search for a localisation ..." />
+                <input type="submit" value="Filtrer">
+            </div>
+        </form>
     </div>
 
 <div class="container">

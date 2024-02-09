@@ -7,7 +7,30 @@ import (
 	"net/http"
 	"strings"
 	"html/template"
+	"time"
 )
+
+
+func main() {
+	// Intégre le dossier asset dans le serveur
+	http.Handle("/asset/", http.StripPrefix("/asset/", http.FileServer(http.Dir("asset"))))
+	
+	// Définit la route principale
+	http.HandleFunc("/", indexHandler)
+	
+	// Définit la route de recherche
+	http.HandleFunc("/search", searchHandler)
+
+	// Définit la route de recherche par date
+	http.HandleFunc("/filtre", FilterdateHandler)
+
+	// Définit la route de recherche par locations
+	http.HandleFunc("/localisation",GeoHandler)
+	
+	// Lance le serveur
+	log.Fatal(http.ListenAndServe(":8015", nil))
+	
+}
 
 type ArtistsInfo struct {
 	ID           int      `json:"id"`
@@ -112,8 +135,9 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Erreur lors de la récupération des artistes", http.StatusInternalServerError)
 		return
 	}
+	
 
-	filterdataa := filterDataBySearch(artistList, search)
+	filterdataa,err := filterDataBySearch(artistList, search)
 
 	// Créer un nouveau template à partir du fichier HTML
 	tmpl, err := template.ParseFiles(htmlTemplatePath)
@@ -131,9 +155,9 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 
-func filterDataBySearch(data []ArtistsInfo, search string) []ArtistsInfo {
+func filterDataBySearch(data []ArtistsInfo, search string) ([]ArtistsInfo,error) {
 	if search == "" {
-		return data
+		return data, nil
 	}
 	var filteredData []ArtistsInfo
 	for _, artist := range data {
@@ -144,26 +168,159 @@ func filterDataBySearch(data []ArtistsInfo, search string) []ArtistsInfo {
 		}
 		fmt.Println("Résultats de la recherche :", filteredData)
 	}
-	return filteredData
+	return filteredData, nil
 }
 
-func main() {
-	start()
-	
-	// Intégre le dossier asset dans le serveur
-	http.Handle("/asset/", http.StripPrefix("/asset/", http.FileServer(http.Dir("asset"))))
-	
-	// Définit la route principale
-	http.HandleFunc("/", indexHandler)
-	
-	// Définit la route de recherche
-	http.HandleFunc("/search", searchHandler)
-	
-	// Lance le serveur
-	log.Fatal(http.ListenAndServe(":8010", nil))
-	
+
+func FilterdateHandler(w http.ResponseWriter, r *http.Request) {
+
+	apiInfo, err := recupJSON() // Assurez-vous que apiInfo est accessible
+	if err != nil {
+		http.Error(w, "Erreur de récupération des infos API", http.StatusInternalServerError)
+		return
+	}
+
+	// Récupérer la valeur du paramètre "filtre" dans l'URL
+	filtre := r.URL.Query().Get("filtre")
+
+	// Convertir la date dans le bon format si nécessaire
+	parsedDate, err := time.Parse("2006-01-02", filtre) // Utilisez le format JJ-MM-AAAA
+	if err != nil {
+		http.Error(w, "Format de date invalide", http.StatusBadRequest)
+		return
+	}
+	formattedDate := parsedDate.Format("02-01-2006") // Convertir la date en format AAAA-MM-JJ
+	log.Println(formattedDate)
+
+	dateList, err := recupDates(apiInfo.DatesInfo)
+	if err != nil {
+		http.Error(w, "Erreur lors de la récupération des dates", http.StatusInternalServerError)
+		return
+	}
+	filterdate, err := filterDatabyDate(dateList.Index, formattedDate)
+	if err != nil {
+		http.Error(w, "Erreur lors du filtrage des données par date", http.StatusInternalServerError)
+		return
+	}
+
+	// Créer un nouveau template à partir du fichier HTML
+	tmpl, err := template.ParseFiles(htmlTemplatePath)
+	if err != nil {
+		http.Error(w, "Erreur lors de la création du template", http.StatusInternalServerError)
+		return
+	}
+
+	// Exécuter le template en passant la liste des artistes filtrés
+	err = tmpl.Execute(w, filterdate)
+	if err != nil {
+		http.Error(w, "Erreur lors de l'exécution du template", http.StatusInternalServerError)
+		return
+	}
 }
 
+
+func filterDatabyDate(data []struct{ID int "json:\"id\""; Dates []string "json:\"dates\""}, filtre string) ([]ArtistsInfo, error) {
+	if filtre == "" {
+		return nil, nil
+	}
+	var artistsPlaying []ArtistsInfo
+	filtreNew := strings.ToLower(strings.TrimLeft(filtre, "*")) // Enlevez le "*" et convertissez en minuscules
+	for _, index := range data{
+		for _, date := range index.Dates {
+			datename := strings.ToLower(strings.TrimLeft(date, "*")) // Enlevez le "*" et convertissez en minuscules
+			if datename == filtreNew {
+				// Si la date correspond, récupérez les informations sur l'artiste à partir de l'ID de l'index
+				artistInfo, err := recupArtistesByID(index.ID)
+				log.Println(artistInfo)
+				if err != nil {
+					return nil, err
+				}
+				// Ajoutez les informations de l'artiste à la liste des artistes jouant à cette date
+				artistsPlaying = append(artistsPlaying, artistInfo)
+			}
+		}
+	}
+	return artistsPlaying, nil
+}
+
+func recupArtistesByID(id int) (ArtistsInfo, error) {	
+	apiInfo, err := recupJSON()
+	if err != nil {
+		log.Printf("Erreur de récupération des infos API : %v\n", err)
+		return ArtistsInfo{}, err
+	}
+	artistList, err := recupArtistes(apiInfo.ArtistsInfo)
+	if err != nil {
+		log.Printf("Erreur lors de la récupération des artistes : %v\n", err)
+		return ArtistsInfo{}, err
+	}
+	for _, artist := range artistList {
+		if artist.ID == id {
+			return artist,nil
+		}
+	}
+	return ArtistsInfo{}, fmt.Errorf("Aucun artiste trouvé avec l'ID %d", id)
+}
+
+
+func GeoHandler(w http.ResponseWriter, r *http.Request){
+	// Récupérer la valeur du paramètre "search" dans l'URL
+	geo := r.URL.Query().Get("geo")
+
+	apiInfo, err := recupJSON()
+	if err != nil {
+		http.Error(w, "Erreur de récupération des infos API", http.StatusInternalServerError)
+		return
+	}
+
+	geoList, err := recupLocation(apiInfo.LocationsInfo)
+	if err != nil {
+		http.Error(w, "Erreur lors de la récupération des artistes", http.StatusInternalServerError)
+		return
+	}
+	
+
+	filterdatabygeo,err := filterDataByLocations(geoList.Index, geo)
+
+	// Créer un nouveau template à partir du fichier HTML
+	tmpl, err := template.ParseFiles(htmlTemplatePath)
+	if err != nil {
+		http.Error(w, "Erreur lors de la création du template", http.StatusInternalServerError)
+		return
+	}
+
+	// Exécuter le template en passant la liste des artistes filtrés
+	err = tmpl.Execute(w, filterdatabygeo)
+	if err != nil {
+		http.Error(w, "Erreur lors de l'exécution du template", http.StatusInternalServerError)
+		return
+	}
+}
+
+
+func filterDataByLocations(data []struct{ID int "json:\"id\""; Locations []string "json:\"locations\""; Dates string "json:\"dates\""}, filtre string) ([]ArtistsInfo, error) {
+	if filtre == "" {
+		return nil, nil
+	}
+	var artistsPlaying []ArtistsInfo
+	filtreNew := strings.ToLower(filtre)
+	for _, index := range data{
+		for _, locations := range index.Locations {
+			locationsname := strings.ToLower(locations) 
+			log.Println(locationsname)
+			if strings.Contains(filtreNew, locationsname) {
+				artistInfo, err := recupArtistesByID(index.ID)
+				log.Println(artistInfo)
+				if err != nil {
+					return nil, err
+				}
+				artistsPlaying = append(artistsPlaying, artistInfo)
+				log.Println(artistsPlaying)
+			}
+		}
+	}
+	return artistsPlaying, nil
+}
 
 
 func recupArtistes(url string) ([]ArtistsInfo, error) {
