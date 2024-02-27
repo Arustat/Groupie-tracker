@@ -50,6 +50,7 @@ type ArtistsInfo struct {
 	Locations    string   `json:"locations"`
 	ConcertDates string   `json:"concertDates"`
 	Relations    string   `json:"relations"`
+	showConcert bool
 }
 
 //Structure Locations pour pouvoir utiliser les données json de l'api Locations
@@ -172,14 +173,22 @@ func searchHandler(w http.ResponseWriter, r *http.Request){
     date := r.URL.Query().Get("filtre")
     location := r.URL.Query().Get("localisation")
 	yearstr := r.URL.Query().Get("year")
+	membre := r.URL.Query().Get("members")
+	first_album := r.URL.Query().Get("first_album")
+	
+	var membres int
 
-	year, err := strconv.Atoi(yearstr)
-	if err != nil {
-		 // Gérer l'erreur si la conversion échoue
-		 http.Error(w, "Année invalide", http.StatusBadRequest)
-		 return
+	if membre == ""{
+		membres,_ = strconv.Atoi(membre)
+		log.Print(membres)
 	}
-	log.Print(year)
+
+	var year int
+
+	if yearstr == ""{
+		year,_ = strconv.Atoi(yearstr)
+		log.Print("Nbr membres : ",year)
+	}
 
     apiInfo, err := recupJSON()
     if err != nil {
@@ -272,14 +281,60 @@ func searchHandler(w http.ResponseWriter, r *http.Request){
 			return 
 		}
 	}
+
+	concert := r.FormValue("concert")
+	log.Printf("Concert sort value: ", concert)
+	if concert == "on"{
+		dateList, err := recupDates(apiInfo.DatesInfo)
+		if err != nil {
+			http.Error(w, "Erreur lors de la récupération des dates", http.StatusInternalServerError)
+			return
+		}
+		Results, err = trier_ordre_concert_récent(dateList.Index)
+		if err != nil {
+			http.Error(w, "Erreur lors du triage des concerts", http.StatusInternalServerError)
+			return
+		}
+		// Définir ShowConcert sur true pour chaque artiste
+		for _, artist := range Results {
+			artist.showConcert = true
+		}
+	}
+
+	log.Print(yearstr)
 	
-	if yearstr == "" {
+	if yearstr != "1950" {
 		Results,err = filterDataByYear(Results, year)
 		if err != nil{
 			http.Error(w, "Erreur lors du filtrage par date", http.StatusInternalServerError)
 			return 
 		}
 	}
+
+	if membres != 0 {
+		Results,err = filterDatabyMembers(Results, membres)
+		if err != nil{
+			http.Error(w, "Erreur lors du filtrage par date", http.StatusInternalServerError)
+			return 
+		}
+	}
+
+	if first_album != ""{
+		parsedDate, err := time.Parse("2006-01-02", first_album) // Utilisez le format JJ-MM-AAAA
+		if err != nil {
+			http.Error(w, "Format de date invalide", http.StatusBadRequest)
+			return
+		}
+		f_first_album := parsedDate.Format("02-01-2006") // Convertir la date en format AAAA-MM-JJ
+		log.Println("First album : ",f_first_album)
+
+		Results,err = filterDatabyFirstAlbum(Results, f_first_album)
+		if err != nil{
+			http.Error(w, "Erreur lors du filtrage par date", http.StatusInternalServerError)
+			return
+		}
+	}
+
     // Exécuter le template en passant les résultats filtrés
     tmpl, err := template.ParseFiles(htmlTemplatePath)
     if err != nil {
@@ -310,14 +365,22 @@ func suggestHandler(w http.ResponseWriter, r *http.Request){
 
 	var suggestions []string
 
-	//Parcourir tous les artistes et vérifier s'ils correspondent à l'entrée de l'user
+	// Parcourir tous les artistes et vérifier s'ils correspondent à l'entrée de l'utilisateur
 	for _, artist := range artistList {
-		if strings.Contains(strings.ToLower(artist.Name),strings.ToLower(suggest)){
-			suggestions = append(suggestions, artist.Name)
+		// Vérifier si le nom de l'artiste correspond à la suggestion de l'utilisateur
+		if strings.Contains(strings.ToLower(artist.Name), strings.ToLower(suggest)) {
+			suggestions = append(suggestions, artist.Name+" - Artiste(s)")
+		}
+
+		// Vérifier tous les membres du groupe
+		for _, member := range artist.Members {
+			if strings.Contains(strings.ToLower(member), strings.ToLower(suggest)) {
+				suggestions = append(suggestions, member+" - Membre")
+				log.Println(suggestions)
+
+			}
 		}
 	}
-
-	log.Println(suggestions)
 
 	json.NewEncoder(w).Encode(suggestions)
 }
@@ -455,10 +518,18 @@ func filterDataBySearch(data []ArtistsInfo, search string) ([]ArtistsInfo,error)
 	}
 	var filteredData []ArtistsInfo
 	for _, artist := range data {
-		artistName := strings.ToLower(artist.Name)
-		searchTerm := strings.ToLower(search)
-		if strings.Contains(artistName, searchTerm) {
+		if strings.Contains(strings.ToLower(artist.Name), strings.ToLower(search)) {
 			filteredData = append(filteredData, artist)
+		}else if len(artist.Members) == 1 {
+			if strings.Contains(strings.ToLower(artist.Members[0]),strings.ToLower(search)){
+				filteredData = append(filteredData, artist)
+			}
+		}else{
+			for _, membre := range artist.Members{
+				if strings.Contains(strings.ToLower(membre),strings.ToLower(search)){
+					filteredData = append(filteredData, artist )
+				}
+			}
 		}
 	}
 	return filteredData, nil
@@ -466,9 +537,6 @@ func filterDataBySearch(data []ArtistsInfo, search string) ([]ArtistsInfo,error)
 
 
 func filterDataByYear(data []ArtistsInfo, years int)([]ArtistsInfo, error){
-	if years == 1961{
-		return data, nil
-	}
 	var filterData []ArtistsInfo
 	for _, artist := range data {
 		if artist.CreationDate == years{
@@ -478,6 +546,34 @@ func filterDataByYear(data []ArtistsInfo, years int)([]ArtistsInfo, error){
 	}
 	return filterData, nil
 }
+
+func  filterDatabyMembers(data []ArtistsInfo, members int)([]ArtistsInfo,error){
+	var count int
+	var filterData []ArtistsInfo
+	for _, artist := range data {
+		count = len(artist.Members)
+		if count == members {
+			filterData = append(filterData, artist)
+		}
+	}
+	return filterData,nil
+}
+
+
+func filterDatabyFirstAlbum(data []ArtistsInfo, dates string)([]ArtistsInfo, error){
+	if dates == ""{
+		return data,nil
+	}
+	var Results []ArtistsInfo
+	for _, artist := range data{
+		if dates == artist.FirstAlbum {
+			Results = append(Results, artist)
+			log.Print(Results, " premier album : ", dates)
+		}
+	}
+	return Results, nil
+}
+
 
 func filterDataByDate(data []struct{ID int "json:\"id\""; Dates []string "json:\"dates\""}, filtre string) ([]ArtistsInfo, error) {
 	if filtre == "" {
@@ -868,7 +964,37 @@ func trier_ordre_alphabe(api []ArtistsInfo)([]ArtistsInfo, error){
 	}
 	return filterData, nil
 }
+// Assurez-vous d'avoir importé "sort" et "time"
 
-func recupNewApiStock(api []ArtistsInfo)[]ArtistsInfo{
-	return api
+func trier_ordre_concert_récent(data []struct{ID int "json:\"id\""; Dates []string "json:\"dates\""}) ([]ArtistsInfo, error) {
+	date := make(map[string]int) // Carte stocke dates et id correspondants
+	var min string
+	for _, index := range data{			
+		if len(index.Dates)>0{
+			min = index.Dates[0]
+		}
+		for _, dates := range index.Dates{
+			if dates > min {
+				min = dates
+			}
+		}
+		date[min] = index.ID
+	}
+
+	var triagedates []string
+	for dates := range date{
+		triagedates = append(triagedates, dates)
+	}
+	sort.Slice(triagedates, func(i, j int) bool {
+		return triagedates[i] > triagedates[j]
+	})
+
+	var Results []ArtistsInfo
+	for _, dates := range triagedates{
+		artistID :=  date[dates]
+		artistInfo,_ := recupArtistesByID(artistID)
+		Results = append(Results,artistInfo)
+	}
+
+	return Results,nil
 }
