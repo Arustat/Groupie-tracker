@@ -75,9 +75,81 @@
                 <p>Creation Date: {{.CreationDate}}</p>
                 <p>First Album: {{.FirstAlbum}}</p>
             </div>
+            <div class="details">
+                <img src="{{.Image}}" alt="{{.Name}}" style="max-width: 60%; max-height: 60%;">
+                <h3>{{.Name}}</h3>
+                <p>Members: {{.Members}}</p>
+                <p>Creation Date: {{.CreationDate}}</p>
+                <p>First Album: {{.FirstAlbum}}</p>
+            </div>
+            <style>
+                .details {
+                    display: none;
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    border: 5px  #323232;
+                    padding: 20px;
+                    background-color: #ffffff;
+                    border-radius: 10%;
+                    text-align: center; /* Centrer horizontalement les éléments */
+                    max-width: 80%; /* Largeur maximale de la boîte */
+                }
+
+                .details img {
+                    display: block;
+                    margin: 0 auto 20px; /* Centrer l'image horizontalement */
+                    max-width: 100%;
+                    height: auto;
+                }
+
+                .details h3 {
+                    font-size: 24px;
+                    margin-bottom: 10px;
+                    color: #000000;
+                }
+
+                .details p {
+                    margin-bottom: 10px;
+                    color: #000000;
+                }
+
+            </style>
         {{else}}
             <p>No matching artists found.</p>
         {{end}}
         </div>
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                var reps = document.querySelectorAll('.rep');
+
+                reps.forEach(function(rep) {
+                    rep.addEventListener('click', function(event) {
+                        var details = this.nextElementSibling;
+                        if (details.classList.contains('details')) {
+                            // Inverse l'affichage des détails lors du clic
+                            if (details.style.display === 'none' || details.style.display === '') {
+                                details.style.display = 'block';
+                            } else {
+                                details.style.display = 'none';
+                            }
+                            // Empêche la propagation de l'événement de clic pour éviter de cacher la div lorsqu'on clique à l'intérieur
+                            event.stopPropagation();
+                        }
+                    });
+                });
+
+                // Ajoute un écouteur d'événements au document pour détecter les clics en dehors de toutes les boîtes de détails
+                document.addEventListener('click', function(event) {
+                    var allDetails = document.querySelectorAll('.details');
+                    allDetails.forEach(function(details) {
+                        if (!details.contains(event.target)) {
+                            details.style.display = 'none';
+                        }
+                    });
+                });
+            });
+        </script>
     </body>
 </html>
