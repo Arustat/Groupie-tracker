@@ -138,4 +138,51 @@ body {
     border-bottom: none; /* Supprimer la séparation pour le dernier élément */
 }
 
+.filtre form {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+}
 
+.sug,
+.geo
+{
+    width: 100%;
+}
+
+.sug,
+.geo {
+    margin-bottom: 10px;
+}
+
+
+.hr {
+    width: 100%;
+}
+
+
+.date-row {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.sug,
+.geo{
+    margin-bottom: 20px; /* Ajout d'un espacement entre les lignes */
+}
+
+.date-row {
+    margin-top: 20px; /* Ajout d'un espacement entre la troisième ligne et la quatrième ligne */
+}
+
+#ordre_alphas,
+#concert_récent,
+#year
+{
+    margin-bottom: 20px;
+}
+
+hr{
+    margin-bottom: 20px;
+}
